@@ -18,9 +18,7 @@ class Pos3D:
 
     def distance_to(self, other: "Pos3D") -> int:
         return math.sqrt(
-            (self.x - other.x)**2
-            + (self.y - other.y)**2
-            + (self.z - other.z)**2
+            (self.x - other.x) ** 2 + (self.y - other.y) ** 2 + (self.z - other.z) ** 2
         )
 
     def __hash__(self):
@@ -34,74 +32,61 @@ InputData = list[Pos3D]
 
 
 def read_input(path: str) -> InputData:
-    return [
-        Pos3D.from_str(line)
-        for line in Path(path).read_text().strip().split("\n")
-    ]
+    return [Pos3D.from_str(line) for line in Path(path).read_text().strip().split("\n")]
 
 
-def solve_part_one(
+def merge_jboxes(
     data: InputData,
-    target_merged: int,
-    top_k: int,
-) -> int:
+    max_merged: int = -1,
+) -> dict[int, set[Pos3D]] | tuple[Pos3D, Pos3D]:
+    circuits = {}
+    jbox2circuit = {}
+
+    for i, jbox in enumerate(data):
+        circuits[i] = {jbox}
+        jbox2circuit[jbox] = i
+
     merge_candidates = sorted(
         [
             ((data[i], data[j]), data[i].distance_to(data[j]))
             for i in range(len(data))
-            for j in range(i, len(data))
-            if i != j
+            for j in range(i + 1, len(data))
         ],
         key=lambda v: v[1],
     )
 
-    jbox2circuit = {}
-    circuits = {}
-    circuit_id = 0
-    
-    for (p1, p2), dist in merge_candidates[:target_merged]:
-        #print(f"Trying {p1}, {p2}...")
+    if max_merged != -1:
+        merge_candidates = merge_candidates[:max_merged]
 
-        c1 = jbox2circuit.get(p1)
-        c2 = jbox2circuit.get(p2)
+    for (p1, p2), dist in merge_candidates:
+        c1 = jbox2circuit[p1]
+        c2 = jbox2circuit[p2]
 
-        if c1 == c2 and c1 is not None:  # Both are in the same circuit
-            #print("Same circuit")
+        if c1 == c2:  # Both are in the same circuit
             continue
-        elif c1 is None and c2 is None:  # Both are not in any circuit
-            #print("Both: no circuit")
-            circuit_id += 1
-
-            circuits[circuit_id] = {p1, p2}
-            jbox2circuit[p1] = circuit_id
-            jbox2circuit[p2] = circuit_id
-        elif c1 is None and c2 is not None:   # P2 is in a circuit
-            #print("P2 in circuit")
-            circuits[c2].add(p1)
-            jbox2circuit[p1] = c2
-        elif c1 is not None and c2 is None:   # P1 is in a circuit
-            #print("P1 in circuit")
-            circuits[c1].add(p2)
-            jbox2circuit[p2] = c1
-        else:  # Both are in a circuit (need to merge)
-            #print("Both in circuit")
-            assert c1 is not None and c2 is not None
-
+        else:  # Different circuits
             all_nodes = circuits[c1] | circuits[c2]
 
             circuits.pop(c1)
             circuits.pop(c2)
 
-            circuit_id += 1
-            circuits[circuit_id] = all_nodes
+            circuits[c1] = all_nodes
 
             for node in all_nodes:
-                jbox2circuit[node] = circuit_id
+                jbox2circuit[node] = c1
 
-        #print("Iter end:")
-        #print(f"{circuits=}")
-        #print(f"{jbox2circuit=}")
-        #print("-" * 30)
+        if max_merged == -1 and len(circuits) == 1:  # Stop if merged
+            return p1, p2
+
+    return circuits
+
+
+def solve_part_one(
+    data: InputData,
+    max_merged: int,
+    top_k: int,
+) -> int:
+    circuits = merge_jboxes(data, max_merged=max_merged)
 
     circuit_sizes = sorted([len(v) for v in circuits.values()], key=lambda v: -v)
 
@@ -114,14 +99,15 @@ def solve_part_one(
 
 
 def solve_part_two(data: InputData) -> int:
-    ans = 0
+    p1, p2 = merge_jboxes(data, max_merged=-1)
+    ans = p1.x * p2.x
     return ans
 
 
 def test() -> None:
     example_input = read_input("./data/example.txt")
-    assert solve_part_one(example_input, target_merged=10, top_k=3) == 40
-    assert solve_part_two(example_input) == 0
+    assert solve_part_one(example_input, max_merged=10, top_k=3) == 40
+    assert solve_part_two(example_input) == 25_272
 
 
 def main() -> None:
@@ -129,7 +115,7 @@ def main() -> None:
 
     _input = read_input("./data/input.txt")
 
-    ans_1 = solve_part_one(_input, target_merged=1000, top_k=3)
+    ans_1 = solve_part_one(_input, max_merged=1000, top_k=3)
     print(f"Part 1: {ans_1}")
 
     ans_2 = solve_part_two(_input)
